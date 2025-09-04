@@ -32,29 +32,26 @@ MESSAGES = {
         "Radare2 |", "Radare2 Du|", "Radare2 Dump|", "Radare2 Dumpe|",
         "Radare2 Dumper|", "Radare2 Dumper"
     ],
-    "install_termux": "Installing binutils...",
     "extracting": "Extracting symbols:",
-    "saved_to": "Dump saved:",
-    "file_not_found": "File not found:",
-    "termux_detected": "Termux ready",
-    "grant_storage": "Run termux-setup-storage",
-    "processing": "Processing...",
-    "methods_found": "Methods:",
-    "classes_found": "Classes:",
-    "time_taken": "Time:",
+    "processing": "Processing symbols...",
+    "methods_found": "Methods found:",
+    "classes_found": "Classes found:",
+    "time_taken": "Time taken:",
     "output_dir_created": "Directory created:",
-    "missing_binutils": "Binutils missing. Installing...",
-    "invalid_path": "Invalid path",
-    "storage_permission": "Storage permission needed",
     "select_lib": "Select .so file (or 'q' to quit): ",
-    "no_so_files": "No .so files found in script directory",
+    "no_so_files": "No .so files found",
     "invalid_input": "Invalid input",
     "press_enter": "Press Enter to exit",
     "elf_check_failed": "Not a valid ELF file",
     "arch_detected": "Architecture detected:",
     "cache_used": "Using cached symbols:",
     "export_json": "Exporting JSON metadata:",
-    "export_html": "Exporting HTML report:"
+    "export_html": "Exporting HTML report:",
+    "vtable_analysis": "Analyzing virtual tables...",
+    "inheritance_analysis": "Analyzing inheritance relationships...",
+    "string_references": "Extracting string references...",
+    "cross_references": "Finding cross-references...",
+    "type_recovery": "Recovering type information..."
 }
 
 def clear_screen():
@@ -62,7 +59,7 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def animated_banner():
-    """Анимированный баннер с проверкой размера терминала"""
+    """Анимированный баннер"""
     try:
         term_width = os.get_terminal_size().columns
     except OSError:
@@ -73,41 +70,6 @@ def animated_banner():
         padding = " " * ((term_width - len(frame)) // 2)
         print(padding + color(frame, "33;1"))
         time.sleep(0.1)
-
-def is_termux():
-    """Проверка, запущен ли скрипт в Termux"""
-    return 'com.termux' in os.environ.get('PREFIX', '')
-
-def check_command(cmd):
-    """Проверка доступности команды в системе"""
-    try:
-        return subprocess.run(['command', '-v', cmd], 
-                            stdout=subprocess.DEVNULL, 
-                            stderr=subprocess.DEVNULL).returncode == 0
-    except:
-        return False
-
-def install_binutils_termux():
-    """Установка binutils в Termux"""
-    logging.info(MESSAGES["install_termux"])
-    subprocess.run(['pkg', 'update', '-y'], 
-                  stdout=subprocess.DEVNULL, 
-                  stderr=subprocess.DEVNULL)
-    subprocess.run(['pkg', 'install', 'binutils', '-y'], 
-                  stdout=subprocess.DEVNULL, 
-                  stderr=subprocess.DEVNULL)
-
-def get_so_files(directory=None):
-    """Поиск .so файлов в указанной директории"""
-    if directory is None:
-        directory = os.path.dirname(os.path.abspath(__file__))
-    
-    so_files = []
-    for f in os.listdir(directory):
-        full_path = os.path.join(directory, f)
-        if f.endswith('.so') and os.path.isfile(full_path):
-            so_files.append((f, full_path))
-    return so_files
 
 def is_valid_elf(file_path):
     """Проверка, является ли файл валидным ELF"""
@@ -121,7 +83,7 @@ def detect_architecture(file_path):
     """Определение архитектуры ELF файла"""
     try:
         result = subprocess.run(['readelf', '-h', file_path], 
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
             for line in result.stdout.split('\n'):
                 if 'Machine:' in line:
@@ -130,208 +92,345 @@ def detect_architecture(file_path):
         pass
     return "Unknown"
 
-def get_cache_path(file_path):
+def get_cache_path(file_path, cache_type="symbols"):
     """Генерация пути для кэширования на основе хеша файла"""
     file_hash = hashlib.md5()
     with open(file_path, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
             file_hash.update(chunk)
-    return f".cache/{file_hash.hexdigest()}_symbols.txt"
+    return f".cache/{file_hash.hexdigest()}_{cache_type}.json"
 
-def get_user_input(so_files):
-    """Интерактивный выбор файла пользователем"""
-    while True:
-        try:
-            print(color("────୨ৎ────────୨ৎ────", "32"))
-            for i, (file, full_path) in enumerate(so_files, 1):
-                arch = detect_architecture(full_path)
-                print(color(f"[{i}] - {file} ({arch})", "32"))
-            print(color("────୨ৎ────────୨ৎ────", "32"))
-            
-            user_input = input(color(MESSAGES["select_lib"], "35;1")).strip().lower()
-            if user_input in ('q', '0', 'quit', 'exit'):
-                print("\nExiting...")
-                sys.exit(0)
-                
-            if not user_input.isdigit() or not (1 <= int(user_input) <= len(so_files)):
-                print(color(MESSAGES["invalid_input"], "31"))
-                continue
-                
-            return so_files[int(user_input) - 1][1]
-        except (KeyboardInterrupt, EOFError):
-            print("\nExiting...")
-            sys.exit(0)
-
-def extract_symbols(lib_path, use_cache=True):
-    """Извлечение символов из библиотеки с поддержкой кэширования"""
-    cache_path = get_cache_path(lib_path)
+def extract_symbols_advanced(lib_path):
+    """Расширенное извлечение символов с использованием нескольких методов"""
+    symbols = []
     
-    # Проверка кэша
-    if use_cache and os.path.exists(cache_path):
-        logging.info(f"{MESSAGES['cache_used']} {cache_path}")
-        with open(cache_path, 'r', encoding='utf-8') as f:
-            return f.read().splitlines()
-    
-    # Извлечение символов
-    logging.info(f"{MESSAGES['extracting']} {lib_path}")
+    # 1. Основное извлечение символов через readelf
     try:
-        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        
-        with open(cache_path, 'w', encoding='utf-8') as cache_file:
-            p1 = subprocess.Popen(['readelf', '-Ws', lib_path], stdout=subprocess.PIPE)
-            p2 = subprocess.Popen(['c++filt'], stdin=p1.stdout, stdout=cache_file)
-            p1.stdout.close()
-            p2.communicate()
-        
-        with open(cache_path, 'r', encoding='utf-8') as f:
-            return f.read().splitlines()
-            
-    except Exception as e:
-        logging.error(f"Symbol extraction failed: {str(e)}")
-        if os.path.exists(cache_path):
-            os.remove(cache_path)
-        sys.exit(1)
+        result = subprocess.run(['readelf', '-Ws', lib_path], 
+                              capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            symbols.extend(result.stdout.splitlines())
+    except subprocess.TimeoutExpired:
+        logging.warning("readelf symbol extraction timed out")
+    
+    # 2. Дополнительное извлечение через nm (если доступен)
+    if check_command('nm'):
+        try:
+            result = subprocess.run(['nm', '-D', '--defined-only', '--demangle', lib_path], 
+                                  capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                symbols.extend(result.stdout.splitlines())
+        except subprocess.TimeoutExpired:
+            logging.warning("nm symbol extraction timed out")
+    
+    # 3. Извлечение информации о секциях
+    try:
+        result = subprocess.run(['readelf', '-S', lib_path], 
+                              capture_output=True, text=True, timeout=20)
+        if result.returncode == 0:
+            symbols.extend([f"SECTION: {line}" for line in result.stdout.splitlines()[:20]])
+    except subprocess.TimeoutExpired:
+        logging.warning("readelf section extraction timed out")
+    
+    return symbols
 
-def parse_symbols_parallel(symbols, max_workers=4):
-    """Многопоточный парсинг символов"""
+def extract_string_references(lib_path):
+    """Извлечение строковых ссылок из бинарного файла"""
+    strings = []
+    try:
+        result = subprocess.run(['strings', '-a', lib_path], 
+                              capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            strings = result.stdout.splitlines()
+    except:
+        pass
+    
+    # Фильтрация и анализ строк
+    interesting_strings = []
+    for s in strings:
+        if len(s) > 4 and any(c in s for c in ['://', '/api/', '/v1/', 'http', 'https', 'lib', 'so']):
+            interesting_strings.append(s)
+    
+    return interesting_strings
+
+def analyze_vtables(symbols):
+    """Анализ виртуальных таблиц на основе символов"""
+    vtables = defaultdict(list)
+    vtable_pattern = re.compile(r'vtable for (.*)')
+    typeinfo_pattern = re.compile(r'typeinfo for (.*)')
+    
+    for line in symbols:
+        # Поиск виртуальных таблиц
+        vtable_match = vtable_pattern.search(line)
+        if vtable_match:
+            class_name = vtable_match.group(1)
+            vtables[class_name].append(("vtable", line))
+        
+        # Поиск информации о типах
+        typeinfo_match = typeinfo_pattern.search(line)
+        if typeinfo_match:
+            class_name = typeinfo_match.group(1)
+            vtables[class_name].append(("typeinfo", line))
+    
+    return vtables
+
+def parse_demangled_name(demangled_name):
+    """Парсинг деманглированного имени для извлечения дополнительной информации"""
+    result = {
+        'class_name': '',
+        'method_name': '',
+        'return_type': '',
+        'parameters': [],
+        'is_const': False,
+        'is_virtual': False,
+        'is_static': False
+    }
+    
+    # Попытка определить, является ли метод виртуальным
+    if demangled_name.startswith('virtual '):
+        result['is_virtual'] = True
+        demangled_name = demangled_name[8:]
+    
+    # Попытка определить, является ли метод статическим
+    if demangled_name.startswith('static '):
+        result['is_static'] = True
+        demangled_name = demangled_name[7:]
+    
+    # Попытка извлечения возвращаемого типа
+    space_pos = demangled_name.find(' ')
+    if space_pos != -1:
+        result['return_type'] = demangled_name[:space_pos]
+        demangled_name = demangled_name[space_pos+1:]
+    
+    # Попытка извлечения имени класса и метода
+    if '::' in demangled_name:
+        class_end = demangled_name.rfind('::')
+        result['class_name'] = demangled_name[:class_end]
+        method_part = demangled_name[class_end+2:]
+        
+        # Извлечение параметров
+        paren_start = method_part.find('(')
+        if paren_start != -1:
+            result['method_name'] = method_part[:paren_start]
+            params = method_part[paren_start+1:-1]  # Исключаем закрывающую скобку
+            
+            # Проверка на const метод
+            if params.endswith(' const'):
+                result['is_const'] = True
+                params = params[:-6]
+            
+            # Разделение параметров
+            if params:
+                result['parameters'] = [p.strip() for p in params.split(',')]
+        else:
+            result['method_name'] = method_part
+    
+    return result
+
+def parse_symbols_advanced(symbols):
+    """Продвинутый парсинг символов с извлечением максимальной информации"""
     classes = defaultdict(list)
-    pattern = re.compile(
-        r'^\s*\d+:\s+([0-9a-fA-F]{8,16})\s+\d+\s+(?:FUNC|OBJECT)\s+(?:GLOBAL|WEAK).*?\s+'
-        r'((?:[a-zA-Z0-9_]+::)*[a-zA-Z0-9_~]+(?:<[^>]+>)?::[a-zA-Z0-9_~]+\([^)]*\))'
+    functions = []
+    variables = []
+    vtables = analyze_vtables(symbols)
+    
+    # Основной паттерн для извлечения символов
+    symbol_pattern = re.compile(
+        r'^\s*\d+:\s+([0-9a-fA-F]{8,16})\s+\d+\s+(\w+)\s+(\w+)\s+\w+\s+\d+\s+(.+)'
     )
     
-    def process_line(line):
-        match = pattern.search(line)
+    # Дополнительные паттерны
+    demangled_pattern = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*::[a-zA-Z0-9_~<>]+\([^)]*\))')
+    offset_pattern = re.compile(r'[0-9a-fA-F]{8,16}')
+    
+    for line in symbols:
+        # Пропускаем строки без полезной информации
+        if not line.strip() or 'SECTION:' in line:
+            continue
+            
+        # Парсинг стандартных символов
+        match = symbol_pattern.search(line)
         if match:
-            offset, full_name = match.groups()
+            offset, type_, bind, name = match.groups()
+            
+            # Пропускаем нулевые смещения
             if offset == "00000000" or offset == "0000000000000000":
-                return None
-            if "::" in full_name:
-                try:
-                    class_path, method_with_params = full_name.rsplit("::", 1)
-                    method_name = method_with_params.split('(')[0]
-                    params = method_with_params[len(method_name):]
-                    return (class_path, method_name, params, offset)
-                except:
-                    pass
-        return None
-    
-    # Многопоточная обработка
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(process_line, line) for line in symbols]
-        
-        for future in tqdm(as_completed(futures), total=len(symbols), 
-                          desc="Processing symbols", unit="symbol"):
-            result = future.result()
-            if result:
-                class_path, method_name, params, offset = result
-                classes[class_path].append((method_name, params, offset))
-    
-    return classes
-
-def generate_dump(lib_name, classes, output_dir, output_formats=None):
-    """Генерация дампа в различных форматах"""
-    if output_formats is None:
-        output_formats = ['cpp', 'json', 'html']
-    
-    clean_lib_name = lib_name.replace('lib', '', 1) if lib_name.startswith('lib') else lib_name
-    output_path = f"{output_dir}/{clean_lib_name}@dump"
-    os.makedirs(output_path, exist_ok=True)
-    logging.info(f"{MESSAGES['output_dir_created']} {output_path}")
-    
-    # Генерация CPP дампа
-    if 'cpp' in output_formats:
-        dump_file = os.path.join(output_path, f"{clean_lib_name}.cpp")
-        with open(dump_file, "w", encoding="utf-8") as out:
-            for cls in sorted(classes):
-                out.write(f"class {cls} {{\n")
-                for method_name, params, offset in sorted(set(classes[cls])):
-                    formatted_offset = f"0x{int(offset, 16):x}"
-                    out.write(f"      {method_name}{params}; //{formatted_offset}\n")
-                out.write("};\n\n")
-    
-    # Генерация JSON метаданных
-    if 'json' in output_formats:
-        json_file = os.path.join(output_path, f"{clean_lib_name}_metadata.json")
-        logging.info(f"{MESSAGES['export_json']} {json_file}")
-        
-        metadata = {
-            "library": clean_lib_name,
-            "classes": [],
-            "total_methods": 0,
-            "timestamp": time.time()
-        }
-        
-        for cls, methods in classes.items():
-            class_info = {
-                "name": cls,
-                "methods": [],
-                "method_count": len(methods)
+                continue
+                
+            symbol_info = {
+                'offset': offset,
+                'type': type_,
+                'bind': bind,
+                'name': name,
+                'demangled': '',
+                'parsed': {}
             }
             
-            for method_name, params, offset in methods:
-                class_info["methods"].append({
-                    "name": method_name,
-                    "params": params,
-                    "offset": f"0x{int(offset, 16):x}"
-                })
+            # Попытка деманглации имени
+            if name.startswith('_Z'):
+                try:
+                    result = subprocess.run(['c++filt', name], 
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        demangled_name = result.stdout.strip()
+                        symbol_info['demangled'] = demangled_name
+                        symbol_info['parsed'] = parse_demangled_name(demangled_name)
+                        
+                        # Добавление в классы, если это метод класса
+                        if symbol_info['parsed']['class_name']:
+                            class_name = symbol_info['parsed']['class_name']
+                            method_info = (
+                                symbol_info['parsed']['method_name'],
+                                f"({', '.join(symbol_info['parsed']['parameters'])})",
+                                offset,
+                                symbol_info['parsed']['return_type'],
+                                symbol_info['parsed']['is_const'],
+                                symbol_info['parsed']['is_virtual'],
+                                symbol_info['parsed']['is_static']
+                            )
+                            classes[class_name].append(method_info)
+                except:
+                    pass
             
-            metadata["classes"].append(class_info)
-            metadata["total_methods"] += len(methods)
-        
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+            # Классификация символов
+            if type_ == 'FUNC':
+                functions.append(symbol_info)
+            elif type_ == 'OBJECT':
+                variables.append(symbol_info)
     
-    # Генерация HTML отчета
-    if 'html' in output_formats:
-        html_file = os.path.join(output_path, f"{clean_lib_name}_report.html")
-        logging.info(f"{MESSAGES['export_html']} {html_file}")
-        
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Radare2 Dumper Report - {clean_lib_name}</title>
-            <style>
-                body {{ font-family: monospace; margin: 20px; }}
-                .class {{ margin-bottom: 20px; border: 1px solid #ccc; padding: 10px; }}
-                .method {{ margin-left: 20px; }}
-                .offset {{ color: #888; }}
-            </style>
-        </head>
-        <body>
-            <h1>Radare2 Dumper Report</h1>
-            <p>Library: <b>{clean_lib_name}</b></p>
-            <p>Classes: {len(classes)}</p>
-            <p>Total methods: {sum(len(methods) for methods in classes.values())}</p>
-            <p>Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <hr>
-        """
+    return classes, functions, variables, vtables
+
+def analyze_inheritance(vtables, classes):
+    """Анализ отношений наследования на основе виртуальных таблиц"""
+    inheritance = defaultdict(list)
+    
+    # Поиск отношений наследования через typeinfo
+    for class_name, items in vtables.items():
+        for item_type, line in items:
+            if item_type == 'typeinfo':
+                # Попытка найти базовые классы
+                if 'for' in line and 'typeinfo name for' not in line:
+                    parts = line.split()
+                    if len(parts) > 3 and parts[-2] == 'for':
+                        base_class = parts[-1]
+                        inheritance[base_class].append(class_name)
+    
+    return inheritance
+
+def generate_advanced_dump(lib_name, classes, functions, variables, vtables, inheritance, output_dir):
+    """Генерация расширенного дампа с дополнительной информацией"""
+    clean_lib_name = lib_name.replace('lib', '', 1) if lib_name.startswith('lib') else lib_name
+    output_path = f"{output_dir}/{clean_lib_name}_advanced_dump"
+    os.makedirs(output_path, exist_ok=True)
+    
+    # 1. Генерация основного файла с классами
+    dump_file = os.path.join(output_path, f"{clean_lib_name}_classes.cpp")
+    with open(dump_file, "w", encoding="utf-8") as out:
+        out.write(f"// Advanced dump for {clean_lib_name}\n")
+        out.write(f"// Generated on {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         
         for cls in sorted(classes):
-            html_content += f'<div class="class"><h2>class {cls}</h2>\n'
-            for method_name, params, offset in sorted(set(classes[cls])):
-                formatted_offset = f"0x{int(offset, 16):x}"
-                html_content += f'<div class="method">{method_name}{params}; <span class="offset">//{formatted_offset}</span></div>\n'
-            html_content += '</div>\n'
-        
-        html_content += "</body></html>"
-        
-        with open(html_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+            # Определяем, есть ли виртуальная таблица для этого класса
+            is_polymorphic = cls in vtables
+            
+            out.write(f"class {cls}")
+            
+            # Добавляем наследование, если известно
+            if cls in inheritance:
+                bases = inheritance[cls]
+                if bases:
+                    out.write(f" : public {', public '.join(bases)}")
+            
+            out.write(" {\n")
+            
+            if is_polymorphic:
+                out.write("public:\n")
+                out.write(f"    // Virtual table at 0x{vtables[cls][0][1].split()[0] if vtables[cls] else 'unknown'}\n")
+            
+            # Разделяем методы по типам
+            constructors = []
+            destructors = []
+            methods = []
+            static_methods = []
+            
+            for method in classes[cls]:
+                method_name, params, offset, return_type, is_const, is_virtual, is_static = method
+                
+                if method_name == cls.split('::')[-1]:
+                    constructors.append((method_name, params, offset, return_type))
+                elif method_name == '~' + cls.split('::')[-1]:
+                    destructors.append((method_name, params, offset, return_type))
+                elif is_static:
+                    static_methods.append((method_name, params, offset, return_type, is_const, is_virtual))
+                else:
+                    methods.append((method_name, params, offset, return_type, is_const, is_virtual))
+            
+            # Вывод конструкторов
+            if constructors:
+                out.write("public:\n")
+                for method_name, params, offset, return_type in constructors:
+                    out.write(f"    {cls}{params}; // offset: 0x{int(offset, 16):x}\n")
+            
+            # Вывод деструкторов
+            if destructors:
+                out.write("public:\n")
+                for method_name, params, offset, return_type in destructors:
+                    out.write(f"    virtual ~{cls.split('::')[-1]}(){params}; // offset: 0x{int(offset, 16):x}\n")
+            
+            # Вывод статических методов
+            if static_methods:
+                out.write("public:\n")
+                for method_name, params, offset, return_type, is_const, is_virtual in static_methods:
+                    out.write(f"    static {return_type} {method_name}{params}; // offset: 0x{int(offset, 16):x}\n")
+            
+            # Вывод обычных методов
+            if methods:
+                out.write("public:\n")
+                for method_name, params, offset, return_type, is_const, is_virtual in methods:
+                    const_suffix = " const" if is_const else ""
+                    virtual_prefix = "virtual " if is_virtual else ""
+                    out.write(f"    {virtual_prefix}{return_type} {method_name}{params}{const_suffix}; // offset: 0x{int(offset, 16):x}\n")
+            
+            out.write("};\n\n")
+    
+    # 2. Генерация файла с глобальными функциями
+    func_file = os.path.join(output_path, f"{clean_lib_name}_functions.cpp")
+    with open(func_file, "w", encoding="utf-8") as out:
+        out.write(f"// Global functions for {clean_lib_name}\n\n")
+        for func in functions:
+            if func['demangled']:
+                out.write(f"// {func['demangled']}\n")
+            out.write(f"// Offset: 0x{int(func['offset'], 16):x}, Type: {func['type']}, Bind: {func['bind']}\n")
+            out.write(f"// Original name: {func['name']}\n\n")
+    
+    # 3. Генерация файла с глобальными переменными
+    var_file = os.path.join(output_path, f"{clean_lib_name}_variables.cpp")
+    with open(var_file, "w", encoding="utf-8") as out:
+        out.write(f"// Global variables for {clean_lib_name}\n\n")
+        for var in variables:
+            if var['demangled']:
+                out.write(f"// {var['demangled']}\n")
+            out.write(f"// Offset: 0x{int(var['offset'], 16):x}, Type: {var['type']}, Bind: {var['bind']}\n")
+            out.write(f"// Original name: {var['name']}\n\n")
+    
+    # 4. Генерация файла с виртуальными таблицами
+    vtable_file = os.path.join(output_path, f"{clean_lib_name}_vtables.cpp")
+    with open(vtable_file, "w", encoding="utf-8") as out:
+        out.write(f"// Virtual tables for {clean_lib_name}\n\n")
+        for cls, items in vtables.items():
+            out.write(f"// VTable for {cls}\n")
+            for item_type, line in items:
+                out.write(f"// {line}\n")
+            out.write("\n")
     
     return output_path
 
 def main():
     """Основная функция скрипта"""
-    # Парсинг аргументов командной строки
-    parser = argparse.ArgumentParser(description='Radare2 Dumper - инструмент для анализа библиотек')
-    parser.add_argument('-i', '--input', help='Путь к .so файлу для анализа')
-    parser.add_argument('-o', '--output', default='./output', help='Директория для сохранения результатов')
-    parser.add_argument('-f', '--format', choices=['cpp', 'json', 'html', 'all'], 
-                       default='cpp', help='Формат вывода (по умолчанию: cpp)')
-    parser.add_argument('--no-cache', action='store_true', help='Не использовать кэширование')
-    parser.add_argument('--no-banner', action='store_true', help='Не показывать баннер')
+    parser = argparse.ArgumentParser(description='Advanced Radare2 Dumper')
+parser.add_argument('-i', '--input', help='Path to .so file for analysis')
+    parser.add_argument('-o', '--output', default='./output', help='Output directory for results')
+    parser.add_argument('--no-banner', action='store_true', help='Don\'t show banner')
     args = parser.parse_args()
     
     # Настройка логирования
@@ -342,59 +441,40 @@ def main():
         clear_screen()
         animated_banner()
     
-    # Определение пути к библиотеке
-    lib_path = args.input
-    if not lib_path:
-        so_files = get_so_files()
-        if not so_files:
-            logging.error(MESSAGES["no_so_files"])
-            input(color(MESSAGES["press_enter"], "36"))
-            sys.exit(1)
-        lib_path = get_user_input(so_files)
-    
-    # Проверка валидности файла
-    if not os.path.isfile(lib_path):
-        logging.error(f"{MESSAGES['file_not_found']} {lib_path}")
+    # Проверка файла
+    if not os.path.isfile(args.input):
+        logging.error(f"File not found: {args.input}")
         sys.exit(1)
     
-    if not is_valid_elf(lib_path):
-        logging.error(f"{MESSAGES['elf_check_failed']}: {lib_path}")
+    if not is_valid_elf(args.input):
+        logging.error(f"Not a valid ELF file: {args.input}")
         sys.exit(1)
     
     # Определение архитектуры
-    arch = detect_architecture(lib_path)
+    arch = detect_architecture(args.input)
     logging.info(f"{MESSAGES['arch_detected']} {arch}")
     
-    # Проверка окружения Termux
-    if is_termux():
-        logging.info(MESSAGES["termux_detected"])
-        
-        # Проверка разрешения хранилища
-        storage_test = os.path.join(os.environ['HOME'], 'storage', 'shared')
-        if not os.path.exists(storage_test):
-            logging.warning(MESSAGES["storage_permission"])
-            logging.warning(MESSAGES["grant_storage"])
-        
-        # Проверка и установка binutils
-        if not check_command('readelf') or not check_command('c++filt'):
-            logging.warning(MESSAGES["missing_binutils"])
-            install_binutils_termux()
+    # Создание выходной директории
+    os.makedirs(args.output, exist_ok=True)
     
     # Извлечение и обработка символов
     start_time = time.time()
-    symbols = extract_symbols(lib_path, use_cache=not args.no_cache)
-    classes = parse_symbols_parallel(symbols)
     
-    # Определение форматов вывода
-    output_formats = ['cpp']
-    if args.format == 'all':
-        output_formats = ['cpp', 'json', 'html']
-    elif args.format != 'cpp':
-        output_formats = [args.format]
+    logging.info(MESSAGES["extracting"])
+    symbols = extract_symbols_advanced(args.input)
+    
+    logging.info(MESSAGES["string_references"])
+    strings = extract_string_references(args.input)
+    
+    logging.info(MESSAGES["processing"])
+    classes, functions, variables, vtables = parse_symbols_advanced(symbols)
+    
+    logging.info(MESSAGES["vtable_analysis"])
+    inheritance = analyze_inheritance(vtables, classes)
     
     # Генерация результатов
-    lib_name = os.path.splitext(os.path.basename(lib_path))[0]
-    output_path = generate_dump(lib_name, classes, args.output, output_formats)
+    lib_name = os.path.splitext(os.path.basename(args.input))[0]
+    output_path = generate_advanced_dump(lib_name, classes, functions, variables, vtables, inheritance, args.output)
     
     # Вывод статистики
     method_count = sum(len(methods) for methods in classes.values())
@@ -402,11 +482,16 @@ def main():
     
     logging.info(f"{MESSAGES['methods_found']} {method_count}")
     logging.info(f"{MESSAGES['classes_found']} {len(classes)}")
-    logging.info(f"{MESSAGES['saved_to']} {output_path}")
     logging.info(f"{MESSAGES['time_taken']} {time_taken:.2f}s")
+    logging.info(f"Dump saved to: {output_path}")
     
-    if not args.input:  # Если запущено в интерактивном режиме
-        input(color(MESSAGES["press_enter"], "36"))
+    # Сохранение строковых ссылок
+    if strings:
+        strings_file = os.path.join(output_path, "string_references.txt")
+        with open(strings_file, 'w', encoding='utf-8') as f:
+            for s in strings:
+                f.write(f"{s}\n")
+        logging.info(f"String references saved to: {strings_file}")
 
 if __name__ == "__main__":
     main()
