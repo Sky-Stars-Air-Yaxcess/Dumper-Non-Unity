@@ -24,6 +24,12 @@ Example cd /storage/emulated/0/MT2/apks/
 
 Then run the python script easy
 
+old version 
+
+python3 r3dump.py
+
+new version
+
 python3 r3dumprer.py
 
 
