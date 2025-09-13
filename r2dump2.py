@@ -1,9 +1,9 @@
-# -- Copyright (c) 2025 Sky-Stars-Air-Yaxcess
+# Copyright (c) 2025 Sky-Stars-Air-Yaxcess
 # Repository: https://github.com/Sky-Stars-Air-Yaxcess/Dumper-Non-Unity
 # License: GNU General Public License v3.0 (GPL-3.0)
 # Do not remove this header. All rights reserved under GPL v3.0.
 
-#tAuthor Script My YouTube Channel Star_Space_Galaxy
+#Author Script My YouTube Channel Star_Space_Galaxy
 #Author Script My GitHub Sky-Stars-Air-Yaxcess
 #My YouTube 2 Channel Star_Space_Local_Yaxcess
 
