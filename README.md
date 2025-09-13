@@ -16,15 +16,13 @@ Now You are ready to use Radare2.
 
 Now Every time you need to dump a unreal engine lib just follow 2 commend below mentioned.
 
-cd your_lib_path 
+cd your_lib
 
 ls
 
 Example cd /storage/emulated/0/MT2/apks/
 
-Then run the python script.
-
-python3 r2dump2.py
+Then run the python script easy
 
 python3 r3dumprer.py
 
