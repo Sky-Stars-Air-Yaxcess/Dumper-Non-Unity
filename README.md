@@ -25,3 +25,16 @@ Example cd /storage/emulated/0/MT2/apks/
 Then run the python script.
 
 python3 r2dump2.py
+
+python3 r3dumprer.py
+
+
+Original Author Script:
+
+My YouTube Channel:
+Star_Space_Galaxy
+My 2 Youtube Channel Star_Space_Local_Yaxcess
+
+My Connact:
+
+Gmail y8068723@gmail.com
