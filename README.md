@@ -5,4 +5,4 @@ Do not remove this header. All rights reserved under GNU General Public License 
 
 My Connact for Gmail y8068723@gmail.com
 
-This method script was created for educational purposes only. Users are solely responsible for how they use it. We respect developers and urge them to fix vulnerabilities. Our goal is not to cause harm, but to promote fair and secure gameplay!
+This script was created for educational purposes only. Users are solely responsible for how they use it. We respect developers and urge them to fix vulnerabilities. Our goal is not to cause harm, but to promote fair and secure gameplay!
