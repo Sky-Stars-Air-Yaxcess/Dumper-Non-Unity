@@ -63,6 +63,14 @@ python3 r3dumper.py (run script)
 
 exit (exit)
 
-another update and a new version of the r4dumper.py script
+another update and a new version of the r4dumper.py script (pre-final version script)
 
 python3 r4dumper.py (run script)
+
+another update and a new version of the r5dumperbeta.py script (final versions script) 
+
+You can now develop the script further yourself if you wish. The GNU General Public License v3.0 allows you to do so, but don't expect any more support from me. I've had enough. I thought I'd finish at version 4, but I decided to create version 5 beta (this is the final one, there won't be any more, as I said for now).
+
+python3 r5dumperbeta.py (run script)
+
+a (All libraries) number examples 1 (only 1 libraries) 
