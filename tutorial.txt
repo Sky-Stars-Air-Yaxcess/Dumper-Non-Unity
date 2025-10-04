@@ -18,7 +18,9 @@ root users:
 
 su (super users root)
 
-chmod 777 r2dump2.py or r3dumper.py (permission)
+chmod 777 r2dump2.py or r3dumper.py or r4dumper or r5dumperbeta.py
+
+or chmod +x r2dump2.py or r3dumper.py or r4dumper or r5dumperbeta.py
 
 termux-setup-storage
 
@@ -35,6 +37,10 @@ pip install tqdm
 rootless users:
 
 termux-setup-storage
+
+chmod 777 r2dump2.py or r3dumper.py or r4dumper or r5dumperbeta.py
+
+or chmod +x r2dump2.py or r3dumper.py or r4dumper or r5dumperbeta.py
 
 pkg update && pkg upgrade -y
 
